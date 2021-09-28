@@ -101,6 +101,13 @@ func (m *MockClusterManager) UpdateClusterHosts(cluster string, hosts []v2.Host)
 	return ret0
 }
 
+func (m *MockClusterManager) PatchClusterHosts(cluster string, hostConfigAdd []v2.Host, addrRemove []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchClusterHosts", cluster, hostConfigAdd, addrRemove)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
 // UpdateClusterHosts indicates an expected call of UpdateClusterHosts
 func (mr *MockClusterManagerMockRecorder) UpdateClusterHosts(cluster, hosts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

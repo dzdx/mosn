@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -218,51 +217,43 @@ func (cm *clusterManager) UpdateClusterHosts(clusterName string, hostConfigs []v
 	return nil
 }
 
-// AppendClusterHosts adds new hosts into cluster
-func (cm *clusterManager) AppendClusterHosts(clusterName string, hostConfigs []v2.Host) error {
+func (cm *clusterManager) PatchClusterHosts(clusterName string, hostConfigAdd []v2.Host, addrRemove []string) error {
 	ci, ok := cm.clustersMap.Load(clusterName)
 	if !ok {
-		log.DefaultLogger.Errorf("[upstream] [cluster manager] AppendClusterHosts cluster %s not found", clusterName)
+		log.DefaultLogger.Errorf("[upstream] [cluster manager] PatchClusterHosts cluster %s not found", clusterName)
 		return fmt.Errorf("cluster %s is not exists", clusterName)
 	}
 	c := ci.(types.Cluster)
 	snap := c.Snapshot()
-	hosts := make([]types.Host, 0, len(hostConfigs))
-	for _, hc := range hostConfigs {
-		hosts = append(hosts, NewSimpleHost(hc, snap.ClusterInfo()))
+	oldHosts := snap.HostSet().Hosts()
+	newHostMap := make(map[string]types.Host, len(oldHosts)+len(hostConfigAdd))
+	for _, host := range oldHosts {
+		newHostMap[host.AddressString()] = host
 	}
-	hosts = append(hosts, snap.HostSet().Hosts()...)
-	c.UpdateHosts(hosts)
+	for _, addr := range addrRemove {
+		delete(newHostMap, addr)
+	}
+	for _, hc := range hostConfigAdd {
+		toAdd := NewSimpleHost(hc, snap.ClusterInfo())
+		newHostMap[toAdd.AddressString()] = toAdd
+	}
+	newHosts := make([]types.Host, 0, len(newHostMap))
+	for _, host := range newHostMap {
+		newHosts = append(newHosts, host)
+	}
+	c.UpdateHosts(newHosts)
 	refreshHostsConfig(c)
 	return nil
 }
 
+// AppendClusterHosts adds new hosts into cluster
+func (cm *clusterManager) AppendClusterHosts(clusterName string, hostConfigs []v2.Host) error {
+	return cm.PatchClusterHosts(clusterName, hostConfigs, nil)
+}
+
 // RemoveClusterHosts removes hosts from cluster by address string
 func (cm *clusterManager) RemoveClusterHosts(clusterName string, addrs []string) error {
-	ci, ok := cm.clustersMap.Load(clusterName)
-	if !ok {
-		log.DefaultLogger.Errorf("[upstream] [cluster manager] RemoveClusterHosts cluster %s not found", clusterName)
-		return fmt.Errorf("cluster %s is not exists", clusterName)
-	}
-	c := ci.(types.Cluster)
-	snap := c.Snapshot()
-	hosts := snap.HostSet().Hosts()
-	newHosts := make([]types.Host, len(hosts))
-	copy(newHosts, hosts)
-	sortedHosts := types.SortedHosts(newHosts)
-	sort.Sort(sortedHosts)
-	for _, addr := range addrs {
-		i := sort.Search(sortedHosts.Len(), func(i int) bool {
-			return sortedHosts[i].AddressString() >= addr
-		})
-		// found it, delete it
-		if i < sortedHosts.Len() && sortedHosts[i].AddressString() == addr {
-			sortedHosts = append(sortedHosts[:i], sortedHosts[i+1:]...)
-		}
-	}
-	c.UpdateHosts(sortedHosts)
-	refreshHostsConfig(c)
-	return nil
+	return cm.PatchClusterHosts(clusterName, nil, addrs)
 }
 
 // GetClusterSnapshot returns cluster snap

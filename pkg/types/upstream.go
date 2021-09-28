@@ -51,6 +51,9 @@ type ClusterManager interface {
 	// temp interface todo: remove it
 	UpdateClusterHosts(cluster string, hosts []v2.Host) error
 
+	// PatchClusterHosts used to add and remove cluster's hosts at once
+    PatchClusterHosts(clusterName string, hostConfigAdd []v2.Host, addrRemove []string) error
+
 	// AppendClusterHosts used to add cluster's hosts
 	AppendClusterHosts(clusterName string, hostConfigs []v2.Host) error
 
